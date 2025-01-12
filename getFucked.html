@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sketchpad</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            background-color: #fff;
+            cursor: crosshair;
+        }
+        .toolbar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button, input {
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        .save-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .save-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <label for="color">Color: </label>
+    <input type="color" id="color" value="#000000">
+    <label for="size">Brush Size: </label>
+    <input type="number" id="size" value="5" min="1" max="50">
+    <button id="clear">Clear</button>
+    <button id="save" class="save-button">Save</button>
+    <button id="analyze" class="save-button">Analyze</button>
+</div>
+<canvas id="sketchpad" width="800" height="600"></canvas>
+
+<script>
+    const canvas = document.getElementById('sketchpad');
+    const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('color');
+    const sizePicker = document.getElementById('size');
+    const clearButton = document.getElementById('clear');
+    const saveButton = document.getElementById('save');
+    const analyzeButton = document.getElementById('analyze');
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    canvas.addEventListener('mousedown', (e) => {
+        isDrawing = true;
+        [lastX, lastY] = [e.offsetX, e.offsetY];
+    });
+
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mouseout', () => isDrawing = false);
+
+    clearButton.addEventListener('click', () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    saveButton.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'sketch.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    });
+
+    analyzeButton.addEventListener('click', async () => {
+        // Convert the canvas to a blob
+        const imageBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+        // Create FormData to send the image file
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'sketch.png');
+
+        try {
+            // Send the POST request with the image file
+            const response = await fetch('http://127.0.0.1:5000/describe_sketch', {
+                method: 'POST',
+                body: formData, // Send form data
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to analyze the sketch.');
+            }
+
+            // Parse the result
+            const result = await response.json();
+
+            if (result.transformed_image) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Display the transformed image in a popup
+                const img = new Image();
+                img.src = `data:image/png;base64,${result.transformed_image}`;
+                img.style.maxWidth = '80%';
+                img.style.border = '2px solid black';
+                img.style.margin = '10px auto';
+                img.style.display = 'block';
+
+                const popup = document.createElement('div');
+                popup.style.position = 'fixed';
+                popup.style.top = '0';
+                popup.style.left = '0';
+                popup.style.width = '100%';
+                popup.style.height = '100%';
+                popup.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                popup.style.display = 'flex';
+                popup.style.justifyContent = 'center';
+                popup.style.alignItems = 'center';
+                popup.appendChild(img);
+
+                popup.addEventListener('click', () => {
+                    document.body.removeChild(popup);
+                });
+
+                document.body.appendChild(popup);
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+
+    function draw(e) {
+        if (!isDrawing) return;
+        ctx.strokeStyle = colorPicker.value;
+        ctx.lineWidth = sizePicker.value;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.stroke();
+        [lastX, lastY] = [e.offsetX, e.offsetY];
+    }
+</script>
+</body>
+</html>
